@@ -8,6 +8,21 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Spacing, Radius, FontSize, Shadow } from '../../constants/theme';
 
+function Field({ label, value, onChangeText, ...props }) {
+  return (
+    <View style={{ marginBottom: Spacing.lg }}>
+      <Text style={styles.label}>{label}</Text>
+      <TextInput
+        style={styles.input}
+        placeholderTextColor={Colors.textMuted}
+        value={value}
+        onChangeText={onChangeText}
+        {...props}
+      />
+    </View>
+  );
+}
+
 export default function RegisterScreen() {
   const router = useRouter();
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'patient', hospitalId: '' });
@@ -28,19 +43,6 @@ export default function RegisterScreen() {
     }, 800);
   };
 
-  const Field = ({ label, field, ...props }) => (
-    <View style={{ marginBottom: Spacing.lg }}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={styles.input}
-        placeholderTextColor={Colors.textMuted}
-        value={form[field]}
-        onChangeText={v => update(field, v)}
-        {...props}
-      />
-    </View>
-  );
-
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: Colors.navy }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
@@ -57,10 +59,10 @@ export default function RegisterScreen() {
           <Text style={styles.title}>Create Account</Text>
           <Text style={styles.sub}>Join the DiabetesCare platform</Text>
 
-          <Field label="Full Name" field="name" placeholder="Dr. Priya Sharma" autoCapitalize="words" />
-          <Field label="Email" field="email" placeholder="email@pgi.edu.in" autoCapitalize="none" keyboardType="email-address" />
-          <Field label="Password" field="password" placeholder="Min 8 characters" secureTextEntry />
-          <Field label="Hospital ID" field="hospitalId" placeholder="PGI-001" autoCapitalize="characters" />
+          <Field label="Full Name" value={form.name} onChangeText={v => update('name', v)} placeholder="Dr. Priya Sharma" autoCapitalize="words" />
+          <Field label="Email" value={form.email} onChangeText={v => update('email', v)} placeholder="email@pgi.edu.in" autoCapitalize="none" keyboardType="email-address" />
+          <Field label="Password" value={form.password} onChangeText={v => update('password', v)} placeholder="Min 8 characters" secureTextEntry />
+          <Field label="Hospital ID" value={form.hospitalId} onChangeText={v => update('hospitalId', v)} placeholder="PGI-001" autoCapitalize="characters" />
 
           <Text style={styles.label}>I am a</Text>
           <View style={styles.roleRow}>

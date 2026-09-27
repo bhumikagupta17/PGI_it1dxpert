@@ -6,7 +6,6 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { authApi } from '../../lib/api';
 import { Colors, Spacing, Radius, FontSize, Shadow } from '../../constants/theme';
 
 export default function RegisterScreen() {
@@ -21,16 +20,12 @@ export default function RegisterScreen() {
       return Alert.alert('Missing fields', 'Please fill all fields.');
     }
     setLoading(true);
-    try {
-      await authApi.register(form);
-      Alert.alert('Account created', 'Please log in.', [
+    setTimeout(() => {
+      setLoading(false);
+      Alert.alert('Account created', 'Please log in with your credentials.', [
         { text: 'OK', onPress: () => router.replace('/(auth)/login') },
       ]);
-    } catch (err) {
-      Alert.alert('Registration failed', err?.response?.data?.message || 'Try again.');
-    } finally {
-      setLoading(false);
-    }
+    }, 800);
   };
 
   const Field = ({ label, field, ...props }) => (
@@ -67,7 +62,6 @@ export default function RegisterScreen() {
           <Field label="Password" field="password" placeholder="Min 8 characters" secureTextEntry />
           <Field label="Hospital ID" field="hospitalId" placeholder="PGI-001" autoCapitalize="characters" />
 
-          {/* Role picker */}
           <Text style={styles.label}>I am a</Text>
           <View style={styles.roleRow}>
             {['patient', 'doctor'].map(r => (
@@ -104,22 +98,22 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  scroll:      { flexGrow: 1, padding: Spacing.xl },
-  back:        { marginTop: Spacing.lg, marginBottom: Spacing.md },
-  header:      { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: Spacing.xl },
-  appName:     { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
-  card:        { backgroundColor: Colors.white, borderRadius: Radius.xl, padding: Spacing.xl, ...Shadow.lg },
-  title:       { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary },
-  sub:         { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4, marginBottom: Spacing.xl },
-  label:       { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary, marginBottom: Spacing.xs },
-  input:       { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 12, fontSize: FontSize.base, color: Colors.textPrimary, backgroundColor: Colors.bg },
-  roleRow:     { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl, marginTop: Spacing.xs },
-  roleBtn:     { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: Colors.teal, borderRadius: Radius.md, paddingVertical: 12, justifyContent: 'center' },
+  scroll:       { flexGrow: 1, padding: Spacing.xl },
+  back:         { marginTop: Spacing.lg, marginBottom: Spacing.md },
+  header:       { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: Spacing.xl },
+  appName:      { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
+  card:         { backgroundColor: Colors.white, borderRadius: Radius.xl, padding: Spacing.xl, ...Shadow.lg },
+  title:        { fontSize: FontSize.xl, fontWeight: '700', color: Colors.textPrimary },
+  sub:          { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 4, marginBottom: Spacing.xl },
+  label:        { fontSize: FontSize.sm, fontWeight: '600', color: Colors.textSecondary, marginBottom: Spacing.xs },
+  input:        { borderWidth: 1, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: Spacing.md, paddingVertical: 12, fontSize: FontSize.base, color: Colors.textPrimary, backgroundColor: Colors.bg },
+  roleRow:      { flexDirection: 'row', gap: Spacing.md, marginBottom: Spacing.xl, marginTop: Spacing.xs },
+  roleBtn:      { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1.5, borderColor: Colors.teal, borderRadius: Radius.md, paddingVertical: 12, justifyContent: 'center' },
   roleBtnActive:{ backgroundColor: Colors.teal },
-  roleTxt:     { fontSize: FontSize.base, fontWeight: '600', color: Colors.teal },
+  roleTxt:      { fontSize: FontSize.base, fontWeight: '600', color: Colors.teal },
   roleTxtActive:{ color: Colors.white },
-  btn:         { backgroundColor: Colors.teal, borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center', marginBottom: Spacing.lg },
-  btnText:     { fontSize: FontSize.base, fontWeight: '700', color: Colors.white },
-  loginLink:   { alignItems: 'center' },
+  btn:          { backgroundColor: Colors.teal, borderRadius: Radius.md, paddingVertical: 14, alignItems: 'center', marginBottom: Spacing.lg },
+  btnText:      { fontSize: FontSize.base, fontWeight: '700', color: Colors.white },
+  loginLink:    { alignItems: 'center' },
   loginLinkText:{ fontSize: FontSize.sm, color: Colors.textSecondary },
 });

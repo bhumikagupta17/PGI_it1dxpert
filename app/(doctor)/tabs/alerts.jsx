@@ -3,17 +3,22 @@ import {
   View, Text, FlatList, StyleSheet,
   TouchableOpacity, RefreshControl,
 } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
-import { alertsApi } from '../../../lib/api';
 import { useAlertStore } from '../../../store/alertStore';
 import { fromNow } from '../../../lib/utils';
 import { Colors, Spacing, Radius, FontSize, Shadow } from '../../../constants/theme';
 
-const SEVERITY_ICON = {
-  critical: { icon: 'warning',          color: Colors.critical },
-  warning:  { icon: 'alert-circle',     color: Colors.warning  },
-  info:     { icon: 'information-circle', color: Colors.info   },
+// Extended mock alerts (dashboard seeds the store, this screen shows them all)
+const EXTRA_ALERTS = [
+  { id: '5', patientName: 'Dev Patel',   message: 'Glucose steady at 112 mg/dL — within target', severity: 'info',     timestamp: new Date(Date.now() - 3 * 3600000).toISOString(), acknowledged: true,  type: 'in_range'      },
+  { id: '6', patientName: 'Neha Singh',  message: 'First reading of the day logged: 89 mg/dL',   severity: 'info',     timestamp: new Date(Date.now() - 4 * 3600000).toISOString(), acknowledged: true,  type: 'first_reading' },
+  { id: '7', patientName: 'Arun Kapoor', message: 'Post-meal spike detected: 195 mg/dL',          severity: 'warning',  timestamp: new Date(Date.now() - 5 * 3600000).toISOString(), acknowledged: false, type: 'post_meal'     },
+];
+
+const SEV_CFG = {
+  critical: { color: Colors.critical, icon: 'warning',            bg: '#FEF2F2' },
+  warning:  { color: Colors.warning,  icon: 'alert-circle',       bg: '#FFFBEB' },
+  info:     { color: Colors.info,     icon: 'information-circle',  bg: '#EFF6FF' },
 };
 
 const TYPE_LABEL = {
@@ -21,34 +26,43 @@ const TYPE_LABEL = {
   low_glucose:    'Low Glucose',
   missed_reading: 'Missed Reading',
   missed_dose:    'Missed Dose',
-  pattern:        'Pattern Detected',
-  system:         'System',
+  pattern:        'Pattern',
+  in_range:       'In Range',
+  first_reading:  'First Reading',
+  post_meal:      'Post-Meal',
 };
 
 function AlertCard({ alert, onAck }) {
-  const sev = SEVERITY_ICON[alert.severity] ?? SEVERITY_ICON.info;
+  const cfg = SEV_CFG[alert.severity] ?? SEV_CFG.info;
   return (
-    <View style={[styles.card, { borderLeftColor: sev.color, borderLeftWidth: 4, opacity: alert.acknowledged ? 0.6 : 1 }]}>
-      <View style={[styles.iconBox, { backgroundColor: sev.color + '18' }]}>
-        <Ionicons name={sev.icon} size={22} color={sev.color} />
+    <View style={[styles.card, Shadow.sm, { opacity: alert.acknowledged ? 0.72 : 1 }]}>
+      <View style={[styles.severityStrip, { backgroundColor: cfg.color }]} />
+      <View style={[styles.iconBox, { backgroundColor: cfg.color + '18' }]}>
+        <Ionicons name={cfg.icon} size={22} color={cfg.color} />
       </View>
       <View style={{ flex: 1 }}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.typeLabel}>{TYPE_LABEL[alert.type] ?? alert.type}</Text>
-          <Text style={styles.time}>{fromNow(alert.timestamp)}</Text>
+        <View style={styles.topRow}>
+          <Text style={styles.typeLabel}>
+            {TYPE_LABEL[alert.type] ?? alert.severity.toUpperCase()}
+          </Text>
+          <Text style={styles.timeText}>{fromNow(alert.timestamp)}</Text>
         </View>
-        <Text style={styles.patient}>{alert.patientName}</Text>
+        <Text style={styles.patientName}>{alert.patientName}</Text>
         <Text style={styles.message}>{alert.message}</Text>
-        {alert.value != null && (
-          <Text style={[styles.valueText, { color: sev.color }]}>Value: {alert.value} mg/dL</Text>
-        )}
-        {!alert.acknowledged && (
-          <TouchableOpacity style={[styles.ackBtn, { borderColor: sev.color }]} onPress={() => onAck(alert.id)}>
-            <Text style={[styles.ackText, { color: sev.color }]}>Acknowledge</Text>
+
+        {!alert.acknowledged ? (
+          <TouchableOpacity
+            style={[styles.ackBtn, { backgroundColor: cfg.color }]}
+            onPress={() => onAck(alert.id)}
+          >
+            <Ionicons name="checkmark" size={14} color={Colors.white} />
+            <Text style={styles.ackBtnText}>Acknowledge</Text>
           </TouchableOpacity>
-        )}
-        {alert.acknowledged && (
-          <Text style={styles.ackdText}>✓ Acknowledged</Text>
+        ) : (
+          <View style={styles.ackdRow}>
+            <Ionicons name="checkmark-circle" size={14} color={Colors.inRange} />
+            <Text style={styles.ackdText}>Acknowledged</Text>
+          </View>
         )}
       </View>
     </View>
@@ -56,51 +70,76 @@ function AlertCard({ alert, onAck }) {
 }
 
 export default function AlertsScreen() {
-  const { alerts, setAlerts, acknowledge, unreadCount } = useAlertStore();
-  const [filter, setFilter] = useState('all'); // all | unread | critical
+  const { alerts: storeAlerts, acknowledge, unreadCount } = useAlertStore();
+  const [filter, setFilter] = useState('all');
+  const [localExtra, setLocalExtra] = useState(EXTRA_ALERTS);
 
-  const { isRefetching, refetch } = useQuery({
-    queryKey: ['alerts'],
-    queryFn: async () => {
-      const { data } = await alertsApi.getAll();
-      setAlerts(data.data);
-      return data.data;
-    },
+  // Merge store alerts with extra mock alerts; deduplicate by id
+  const allAlerts = [...storeAlerts];
+  localExtra.forEach(e => {
+    if (!allAlerts.find(a => a.id === e.id)) allAlerts.push(e);
   });
 
-  const handleAck = async (id) => {
+  const handleAck = (id) => {
     acknowledge(id);
-    try { await alertsApi.acknowledge(id); } catch (_) {}
+    setLocalExtra(prev => prev.map(a => a.id === id ? { ...a, acknowledged: true } : a));
   };
 
-  const filtered = alerts.filter(a => {
-    if (filter === 'unread')   return !a.acknowledged;
-    if (filter === 'critical') return a.severity === 'critical';
-    return true;
-  });
+  const filtered = allAlerts
+    .filter(a => {
+      if (filter === 'unread')   return !a.acknowledged;
+      if (filter === 'critical') return a.severity === 'critical';
+      if (filter === 'warning')  return a.severity === 'warning';
+      return true;
+    })
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  const unread    = allAlerts.filter(a => !a.acknowledged).length;
+  const critical  = allAlerts.filter(a => a.severity === 'critical' && !a.acknowledged).length;
+
+  const FILTERS = [
+    { key: 'all',      label: `All (${allAlerts.length})` },
+    { key: 'unread',   label: `Unread (${unread})` },
+    { key: 'critical', label: `Critical (${critical})` },
+    { key: 'warning',  label: 'Warnings' },
+  ];
 
   return (
     <View style={styles.root}>
+      {/* Header */}
       <View style={styles.header}>
         <View>
           <Text style={styles.title}>Alerts</Text>
-          {unreadCount > 0 && (
-            <Text style={styles.unreadBadge}>{unreadCount} unread</Text>
-          )}
+          <Text style={styles.subtitle}>
+            {unread > 0 ? `${unread} need attention` : 'All clear'}
+          </Text>
         </View>
-        <Ionicons name="notifications" size={24} color={Colors.white} />
+        <View style={[styles.badgeWrap, { backgroundColor: unread > 0 ? Colors.critical : Colors.inRange }]}>
+          <Ionicons name={unread > 0 ? 'notifications' : 'notifications-outline'} size={18} color={Colors.white} />
+          {unread > 0 && <Text style={styles.badgeNum}>{unread}</Text>}
+        </View>
       </View>
 
-      {/* Filter chips */}
+      {/* Critical summary bar */}
+      {critical > 0 && (
+        <View style={styles.criticalBar}>
+          <Ionicons name="warning" size={16} color={Colors.white} />
+          <Text style={styles.criticalBarText}>
+            {critical} critical alert{critical > 1 ? 's' : ''} require immediate action
+          </Text>
+        </View>
+      )}
+
+      {/* Filters */}
       <View style={styles.filterRow}>
-        {['all', 'unread', 'critical'].map(f => (
+        {FILTERS.map(f => (
           <TouchableOpacity
-            key={f}
-            style={[styles.filterBtn, filter === f && styles.filterBtnActive]}
-            onPress={() => setFilter(f)}
+            key={f.key}
+            style={[styles.filterBtn, filter === f.key && styles.filterBtnActive]}
+            onPress={() => setFilter(f.key)}
           >
-            <Text style={[styles.filterText, filter === f && styles.filterTextActive]}>
-              {f.charAt(0).toUpperCase() + f.slice(1)}
+            <Text style={[styles.filterText, filter === f.key && styles.filterTextActive]}>
+              {f.label}
             </Text>
           </TouchableOpacity>
         ))}
@@ -111,11 +150,12 @@ export default function AlertsScreen() {
         keyExtractor={item => item.id}
         renderItem={({ item }) => <AlertCard alert={item} onAck={handleAck} />}
         contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40, gap: Spacing.sm }}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} />}
+        refreshControl={<RefreshControl refreshing={false} onRefresh={() => {}} />}
         ListEmptyComponent={
-          <View style={styles.empty}>
+          <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle" size={48} color={Colors.inRange} />
-            <Text style={styles.emptyText}>No alerts</Text>
+            <Text style={styles.emptyTitle}>All clear!</Text>
+            <Text style={styles.emptyText}>No alerts match this filter</Text>
           </View>
         }
       />
@@ -124,26 +164,38 @@ export default function AlertsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root:           { flex: 1, backgroundColor: Colors.bg },
-  header:         { backgroundColor: Colors.navy, paddingTop: 56, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  title:          { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
-  unreadBadge:    { fontSize: FontSize.xs, color: Colors.amber, marginTop: 4, fontWeight: '700' },
-  filterRow:      { flexDirection: 'row', padding: Spacing.lg, gap: Spacing.sm },
-  filterBtn:      { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: Radius.full, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
-  filterBtnActive:{ backgroundColor: Colors.navy, borderColor: Colors.navy },
-  filterText:     { fontSize: FontSize.sm, color: Colors.textSecondary, fontWeight: '600' },
-  filterTextActive:{ color: Colors.white },
-  card:           { backgroundColor: Colors.white, borderRadius: Radius.md, padding: Spacing.md, flexDirection: 'row', gap: Spacing.md, ...Shadow.sm },
-  iconBox:        { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center' },
-  cardHeader:     { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 2 },
-  typeLabel:      { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  time:           { fontSize: FontSize.xs, color: Colors.textMuted },
-  patient:        { fontSize: FontSize.base, fontWeight: '700', color: Colors.textPrimary },
-  message:        { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 3 },
-  valueText:      { fontSize: FontSize.sm, fontWeight: '700', marginTop: 4 },
-  ackBtn:         { alignSelf: 'flex-start', borderWidth: 1, borderRadius: Radius.sm, paddingHorizontal: Spacing.md, paddingVertical: 5, marginTop: Spacing.sm },
-  ackText:        { fontSize: FontSize.sm, fontWeight: '700' },
-  ackdText:       { fontSize: FontSize.xs, color: Colors.inRange, fontWeight: '600', marginTop: Spacing.xs },
-  empty:          { alignItems: 'center', paddingTop: 60, gap: Spacing.md },
-  emptyText:      { fontSize: FontSize.md, color: Colors.textMuted },
+  root:             { flex: 1, backgroundColor: Colors.bg },
+
+  header:           { backgroundColor: Colors.navy, paddingTop: 56, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
+  title:            { fontSize: FontSize.xl, fontWeight: '800', color: Colors.white },
+  subtitle:         { fontSize: FontSize.xs, color: Colors.tealLight, marginTop: 3 },
+  badgeWrap:        { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  badgeNum:         { position: 'absolute', top: -2, right: -2, backgroundColor: Colors.white, borderRadius: 8, minWidth: 16, height: 16, textAlign: 'center', fontSize: 9, fontWeight: '800', color: Colors.critical, paddingHorizontal: 2 },
+
+  criticalBar:      { backgroundColor: Colors.critical, flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, paddingHorizontal: Spacing.lg, paddingVertical: Spacing.sm },
+  criticalBarText:  { color: Colors.white, fontSize: FontSize.sm, fontWeight: '600', flex: 1 },
+
+  filterRow:        { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: Spacing.lg, paddingVertical: Spacing.md, gap: Spacing.sm },
+  filterBtn:        { paddingHorizontal: Spacing.md, paddingVertical: 6, borderRadius: Radius.full, backgroundColor: Colors.white, borderWidth: 1, borderColor: Colors.border },
+  filterBtnActive:  { backgroundColor: Colors.navy, borderColor: Colors.navy },
+  filterText:       { fontSize: FontSize.xs, color: Colors.textSecondary, fontWeight: '600' },
+  filterTextActive: { color: Colors.white },
+
+  card:             { backgroundColor: Colors.white, borderRadius: Radius.lg, flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, overflow: 'hidden' },
+  severityStrip:    { width: 4, alignSelf: 'stretch' },
+  iconBox:          { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginVertical: Spacing.md, flexShrink: 0 },
+  topRow:           { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingRight: Spacing.md, paddingTop: Spacing.md },
+  typeLabel:        { fontSize: FontSize.xs, fontWeight: '700', color: Colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.6 },
+  timeText:         { fontSize: FontSize.xs, color: Colors.textMuted },
+  patientName:      { fontSize: FontSize.base, fontWeight: '700', color: Colors.textPrimary, marginTop: 2, paddingRight: Spacing.md },
+  message:          { fontSize: FontSize.sm, color: Colors.textSecondary, marginTop: 3, paddingRight: Spacing.md, lineHeight: 18 },
+
+  ackBtn:           { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', borderRadius: Radius.sm, paddingHorizontal: Spacing.sm, paddingVertical: 5, marginTop: Spacing.sm, marginBottom: Spacing.md },
+  ackBtnText:       { fontSize: FontSize.xs, fontWeight: '700', color: Colors.white },
+  ackdRow:          { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: Spacing.sm, marginBottom: Spacing.md },
+  ackdText:         { fontSize: FontSize.xs, color: Colors.inRange, fontWeight: '600' },
+
+  emptyState:       { alignItems: 'center', paddingTop: 60, gap: Spacing.sm },
+  emptyTitle:       { fontSize: FontSize.lg, fontWeight: '700', color: Colors.textPrimary },
+  emptyText:        { fontSize: FontSize.base, color: Colors.textMuted },
 });

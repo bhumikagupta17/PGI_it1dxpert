@@ -1,23 +1,82 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet,
-  TouchableOpacity, Modal, TextInput, Alert,
+  TouchableOpacity, Modal, TextInput, Alert, Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Notifications from 'expo-notifications';
 import { Colors, Spacing, Radius, FontSize, Shadow } from '../../../constants/theme';
 
-// Mock data — replace with API calls
+// ── Notification handler (show alert when app is foregrounded) ─
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// ── Mock data ─────────────────────────────────────────────────
 const MOCK_MEDS = [
   { id: '1', name: 'NovoRapid (Insulin Aspart)', dose: '4–8 units', frequency: 'Before meals', times: ['07:30', '12:30', '18:30'], active: true,  type: 'insulin' },
   { id: '2', name: 'Lantus (Insulin Glargine)',  dose: '20 units',  frequency: 'Once daily',   times: ['22:00'],                   active: true,  type: 'insulin' },
   { id: '3', name: 'Metformin',                  dose: '500 mg',    frequency: 'Twice daily',  times: ['08:00', '20:00'],          active: true,  type: 'tablet'  },
-  { id: '4', name: 'Vitamin D3',                 dose: '60,000 IU', frequency: 'Weekly',       times: ['Sunday 09:00'],            active: false, type: 'tablet'  },
+  { id: '4', name: 'Vitamin D3',                 dose: '60,000 IU', frequency: 'Weekly',       times: ['09:00'],                   active: false, type: 'tablet'  },
 ];
 
-function MedCard({ med, onToggle }) {
+// ── Notification helpers ───────────────────────────────────────
+async function requestPermissions() {
+  const { status: existing } = await Notifications.getPermissionsAsync();
+  if (existing === 'granted') return true;
+  const { status } = await Notifications.requestPermissionsAsync();
+  return status === 'granted';
+}
+
+async function scheduleReminders(med) {
+  const ids = [];
+  for (const time of med.times) {
+    const [hourStr, minStr] = time.split(':');
+    const hour   = parseInt(hourStr, 10);
+    const minute = parseInt(minStr,  10);
+    if (isNaN(hour) || isNaN(minute)) continue;
+
+    // Android needs a channel
+    if (Platform.OS === 'android') {
+      await Notifications.setNotificationChannelAsync('med-reminders', {
+        name: 'Medication Reminders',
+        importance: Notifications.AndroidImportance.HIGH,
+        sound: 'default',
+      });
+    }
+
+    const id = await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '💊 Medication Reminder',
+        body:  `Time to take ${med.name} — ${med.dose}`,
+        sound: true,
+        data:  { medId: med.id },
+      },
+      trigger: { hour, minute, repeats: true },
+    });
+    ids.push(id);
+  }
+  return ids;
+}
+
+async function cancelReminders(ids = []) {
+  for (const id of ids) {
+    await Notifications.cancelScheduledNotificationAsync(id);
+  }
+}
+
+// ── MedCard ───────────────────────────────────────────────────
+function MedCard({ med, notifIds, onToggle }) {
+  const hasNotifs = notifIds?.length > 0;
   return (
     <View style={[styles.card, Shadow.sm, !med.active && { opacity: 0.5 }]}>
-      <View style={[styles.typeIcon, { backgroundColor: med.type === 'insulin' ? Colors.teal + '20' : Colors.amber + '20' }]}>
+      <View style={[styles.typeIcon, {
+        backgroundColor: med.type === 'insulin' ? Colors.teal + '20' : Colors.amber + '20',
+      }]}>
         <Ionicons
           name={med.type === 'insulin' ? 'water-outline' : 'tablet-portrait-outline'}
           size={20}
@@ -35,6 +94,18 @@ function MedCard({ med, onToggle }) {
             </View>
           ))}
         </View>
+        {med.active && (
+          <View style={styles.notifRow}>
+            <Ionicons
+              name={hasNotifs ? 'notifications' : 'notifications-off-outline'}
+              size={13}
+              color={hasNotifs ? Colors.inRange : Colors.textMuted}
+            />
+            <Text style={[styles.notifText, { color: hasNotifs ? Colors.inRange : Colors.textMuted }]}>
+              {hasNotifs ? 'Reminders on' : 'Reminders off'}
+            </Text>
+          </View>
+        )}
       </View>
       <TouchableOpacity onPress={() => onToggle(med.id)}>
         <Ionicons
@@ -47,35 +118,75 @@ function MedCard({ med, onToggle }) {
   );
 }
 
+// ── Main screen ───────────────────────────────────────────────
 export default function MedicationsScreen() {
-  const [meds, setMeds] = useState(MOCK_MEDS);
-  const [showModal, setShowModal] = useState(false);
-  const [form, setForm] = useState({ name: '', dose: '', frequency: '', times: '' });
+  const [meds, setMeds]           = useState(MOCK_MEDS);
+  const [showModal, setShowModal]  = useState(false);
+  const [form, setForm]            = useState({ name: '', dose: '', frequency: '', times: '' });
+  const [permitted, setPermitted]  = useState(false);
+  // map: medId → [notifId, ...]
+  const notifMap = useRef({});
 
-  const toggle = (id) =>
+  // Request permissions + schedule reminders for active meds on mount
+  useEffect(() => {
+    (async () => {
+      const granted = await requestPermissions();
+      setPermitted(granted);
+      if (!granted) return;
+
+      for (const med of MOCK_MEDS.filter(m => m.active)) {
+        const ids = await scheduleReminders(med);
+        notifMap.current[med.id] = ids;
+      }
+    })();
+  }, []);
+
+  const toggle = async (id) => {
+    const med = meds.find(m => m.id === id);
+    if (!med) return;
+
+    if (med.active) {
+      // Deactivating — cancel its reminders
+      await cancelReminders(notifMap.current[id] ?? []);
+      notifMap.current[id] = [];
+    } else {
+      // Activating — schedule reminders
+      if (!permitted) {
+        Alert.alert('Notifications blocked', 'Enable notifications for this app in your phone settings to get reminders.');
+      } else {
+        const ids = await scheduleReminders(med);
+        notifMap.current[id] = ids;
+      }
+    }
     setMeds(prev => prev.map(m => m.id === id ? { ...m, active: !m.active } : m));
+  };
 
-  const addMed = () => {
+  const addMed = async () => {
     if (!form.name || !form.dose) return Alert.alert('Fill name and dose');
-    setMeds(prev => [...prev, {
-      id: Date.now().toString(),
-      name: form.name,
-      dose: form.dose,
+    const newMed = {
+      id:        Date.now().toString(),
+      name:      form.name,
+      dose:      form.dose,
       frequency: form.frequency,
-      times: form.times.split(',').map(t => t.trim()).filter(Boolean),
-      active: true,
-      type: 'tablet',
-    }]);
+      times:     form.times.split(',').map(t => t.trim()).filter(Boolean),
+      active:    true,
+      type:      'tablet',
+    };
+    if (permitted) {
+      const ids = await scheduleReminders(newMed);
+      notifMap.current[newMed.id] = ids;
+    }
+    setMeds(prev => [...prev, newMed]);
     setForm({ name: '', dose: '', frequency: '', times: '' });
     setShowModal(false);
   };
 
-  const activeMeds = meds.filter(m => m.active);
+  const activeMeds   = meds.filter(m => m.active);
   const inactiveMeds = meds.filter(m => !m.active);
 
-  const today = new Date();
   const nextDose = activeMeds
     .flatMap(m => m.times.map(t => ({ med: m.name, time: t })))
+    .filter(d => /^\d{2}:\d{2}$/.test(d.time))
     .sort((a, b) => a.time.localeCompare(b.time))[0];
 
   return (
@@ -90,7 +201,17 @@ export default function MedicationsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Next dose reminder */}
+      {/* Permission warning */}
+      {!permitted && (
+        <View style={styles.warnCard}>
+          <Ionicons name="notifications-off-outline" size={18} color={Colors.warning} />
+          <Text style={styles.warnText}>
+            Notifications are disabled — enable them in Settings to get medication reminders.
+          </Text>
+        </View>
+      )}
+
+      {/* Next dose */}
       {nextDose && (
         <View style={styles.nextDoseCard}>
           <Ionicons name="alarm-outline" size={20} color={Colors.amber} />
@@ -105,7 +226,13 @@ export default function MedicationsScreen() {
       <FlatList
         data={[...activeMeds, ...inactiveMeds]}
         keyExtractor={m => m.id}
-        renderItem={({ item }) => <MedCard med={item} onToggle={toggle} />}
+        renderItem={({ item }) => (
+          <MedCard
+            med={item}
+            notifIds={notifMap.current[item.id]}
+            onToggle={toggle}
+          />
+        )}
         contentContainerStyle={{ padding: Spacing.lg, paddingBottom: 40, gap: Spacing.sm }}
         ListHeaderComponent={<Text style={styles.sectionHeader}>ACTIVE & INACTIVE</Text>}
       />
@@ -121,10 +248,10 @@ export default function MedicationsScreen() {
               </TouchableOpacity>
             </View>
             {[
-              { label: 'Medication name', key: 'name', placeholder: 'e.g. Metformin' },
-              { label: 'Dose',            key: 'dose', placeholder: 'e.g. 500 mg' },
-              { label: 'Frequency',       key: 'frequency', placeholder: 'e.g. Twice daily' },
-              { label: 'Times (comma-separated)', key: 'times', placeholder: '08:00, 20:00' },
+              { label: 'Medication name',           key: 'name',      placeholder: 'e.g. Metformin'    },
+              { label: 'Dose',                      key: 'dose',      placeholder: 'e.g. 500 mg'       },
+              { label: 'Frequency',                 key: 'frequency', placeholder: 'e.g. Twice daily'  },
+              { label: 'Times (comma-separated)',   key: 'times',     placeholder: '08:00, 20:00'      },
             ].map(f => (
               <View key={f.key} style={{ marginBottom: Spacing.md }}>
                 <Text style={styles.formLabel}>{f.label}</Text>
@@ -153,7 +280,9 @@ const styles = StyleSheet.create({
   title:         { fontSize: FontSize.xl, fontWeight: '700', color: Colors.white },
   sub:           { fontSize: FontSize.sm, color: Colors.tealLight, marginTop: 4 },
   addBtn:        { width: 38, height: 38, borderRadius: 19, backgroundColor: Colors.teal, justifyContent: 'center', alignItems: 'center' },
-  nextDoseCard:  { margin: Spacing.lg, backgroundColor: Colors.amber + '18', borderRadius: Radius.md, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.amber + '40' },
+  warnCard:      { margin: Spacing.lg, marginBottom: 0, backgroundColor: Colors.warning + '18', borderRadius: Radius.md, padding: Spacing.md, flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, borderWidth: 1, borderColor: Colors.warning + '40' },
+  warnText:      { flex: 1, fontSize: FontSize.sm, color: Colors.textPrimary, lineHeight: 20 },
+  nextDoseCard:  { margin: Spacing.lg, marginBottom: 0, backgroundColor: Colors.amber + '18', borderRadius: Radius.md, padding: Spacing.md, flexDirection: 'row', alignItems: 'center', gap: Spacing.md, borderWidth: 1, borderColor: Colors.amber + '40' },
   nextDoseLabel: { fontSize: FontSize.xs, color: Colors.amber, fontWeight: '600' },
   nextDoseName:  { fontSize: FontSize.base, fontWeight: '700', color: Colors.textPrimary },
   nextDoseTime:  { fontSize: FontSize.md, fontWeight: '700', color: Colors.amber },
@@ -165,6 +294,8 @@ const styles = StyleSheet.create({
   timesRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: Spacing.sm },
   timePill:      { flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: Colors.teal + '15', borderRadius: Radius.full, paddingHorizontal: 8, paddingVertical: 3 },
   timeText:      { fontSize: FontSize.xs, color: Colors.teal, fontWeight: '600' },
+  notifRow:      { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+  notifText:     { fontSize: FontSize.xs, fontWeight: '600' },
   overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   modalCard:     { backgroundColor: Colors.white, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl, padding: Spacing.xl },
   modalHeader:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.xl },

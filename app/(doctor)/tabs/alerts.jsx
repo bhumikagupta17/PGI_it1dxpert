@@ -43,7 +43,7 @@ function AlertCard({ alert, onAck }) {
       <View style={{ flex: 1 }}>
         <View style={styles.topRow}>
           <Text style={styles.typeLabel}>
-            {TYPE_LABEL[alert.type] ?? alert.severity.toUpperCase()}
+            {TYPE_LABEL[alert.type] ?? (alert.severity ?? alert.type ?? 'alert').toUpperCase()}
           </Text>
           <Text style={styles.timeText}>{fromNow(alert.timestamp)}</Text>
         </View>

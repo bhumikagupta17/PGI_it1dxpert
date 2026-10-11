@@ -11,18 +11,20 @@ import { Colors, Spacing, Radius, FontSize, Shadow } from '../../../constants/th
 import { fromNow, initials } from '../../../lib/utils';
 
 const MOCK_ALERTS = [
-  { id: '1', patientId: 'p1', patientName: 'Rahul Sharma', type: 'critical', message: 'Glucose critically high: 320 mg/dL', time: new Date(Date.now() - 10 * 60000).toISOString(), read: false },
-  { id: '2', patientId: 'p2', patientName: 'Priya Mehta', type: 'warning', message: 'Glucose elevated: 210 mg/dL after dinner', time: new Date(Date.now() - 40 * 60000).toISOString(), read: false },
-  { id: '3', patientId: 'p3', patientName: 'Anita Verma', type: 'warning', message: 'Missed insulin dose — 2 h overdue', time: new Date(Date.now() - 90 * 60000).toISOString(), read: true },
-  { id: '4', patientId: 'p4', patientName: 'Suresh Patel', type: 'critical', message: 'Glucose critically low: 58 mg/dL', time: new Date(Date.now() - 3 * 3600000).toISOString(), read: true },
+  { id: '1', patientId: '1', patientName: 'Rahul Sharma', type: 'critical', message: 'Glucose critically high: 320 mg/dL', time: new Date(Date.now() - 10 * 60000).toISOString(), acknowledged: false },
+  { id: '2', patientId: '2', patientName: 'Priya Mehta',  type: 'critical', message: 'Glucose critically low: 58 mg/dL',  time: new Date(Date.now() - 8 * 60000).toISOString(),  acknowledged: false },
+  { id: '3', patientId: '3', patientName: 'Ankit Verma',  type: 'warning',  message: 'Missed insulin dose — 2 h overdue', time: new Date(Date.now() - 90 * 60000).toISOString(), acknowledged: true  },
+  { id: '4', patientId: '4', patientName: 'Sana Khan',    type: 'warning',  message: 'Glucose elevated: 240 mg/dL after dinner', time: new Date(Date.now() - 2 * 3600000).toISOString(), acknowledged: true },
 ];
 
 const MOCK_PATIENTS = [
-  { id: 'p1', name: 'Rahul Sharma', age: 45, lastReading: 320, lastReadingTime: new Date(Date.now() - 10 * 60000).toISOString(), status: 'critical', trend: 'up' },
-  { id: 'p2', name: 'Priya Mehta', age: 32, lastReading: 210, lastReadingTime: new Date(Date.now() - 40 * 60000).toISOString(), status: 'warning', trend: 'stable' },
-  { id: 'p3', name: 'Anita Verma', age: 58, lastReading: 98, lastReadingTime: new Date(Date.now() - 2 * 3600000).toISOString(), status: 'normal', trend: 'stable' },
-  { id: 'p4', name: 'Suresh Patel', age: 67, lastReading: 58, lastReadingTime: new Date(Date.now() - 3 * 3600000).toISOString(), status: 'critical', trend: 'down' },
-  { id: 'p5', name: 'Kavita Singh', age: 41, lastReading: 145, lastReadingTime: new Date(Date.now() - 4 * 3600000).toISOString(), status: 'warning', trend: 'up' },
+  { id: '1', name: 'Rahul Sharma',  age: 28, lastReading: 320, lastReadingTime: new Date(Date.now() - 15 * 60000).toISOString(),      status: 'critical', trend: 'up'     },
+  { id: '2', name: 'Priya Mehta',   age: 34, lastReading: 58,  lastReadingTime: new Date(Date.now() - 8 * 60000).toISOString(),       status: 'critical', trend: 'down'   },
+  { id: '3', name: 'Ankit Verma',   age: 52, lastReading: 145, lastReadingTime: new Date(Date.now() - 45 * 60000).toISOString(),      status: 'normal',   trend: 'stable' },
+  { id: '4', name: 'Sana Khan',     age: 22, lastReading: 240, lastReadingTime: new Date(Date.now() - 2 * 3600000).toISOString(),     status: 'warning',  trend: 'up'     },
+  { id: '5', name: 'Dev Patel',     age: 61, lastReading: 112, lastReadingTime: new Date(Date.now() - 30 * 60000).toISOString(),      status: 'normal',   trend: 'stable' },
+  { id: '6', name: 'Neha Singh',    age: 19, lastReading: 89,  lastReadingTime: new Date(Date.now() - 3 * 3600000).toISOString(),     status: 'normal',   trend: 'stable' },
+  { id: '7', name: 'Arun Kapoor',   age: 57, lastReading: 195, lastReadingTime: new Date(Date.now() - 1 * 3600000).toISOString(),     status: 'warning',  trend: 'up'     },
 ];
 
 const statusColor = (s) => ({

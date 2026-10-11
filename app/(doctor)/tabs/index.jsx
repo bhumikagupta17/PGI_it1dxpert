@@ -11,10 +11,10 @@ import { Colors, Spacing, Radius, FontSize, Shadow } from '../../../constants/th
 import { fromNow, initials } from '../../../lib/utils';
 
 const MOCK_ALERTS = [
-  { id: '1', patientId: '1', patientName: 'Rahul Sharma', type: 'critical', message: 'Glucose critically high: 320 mg/dL', time: new Date(Date.now() - 10 * 60000).toISOString(), acknowledged: false },
-  { id: '2', patientId: '2', patientName: 'Priya Mehta',  type: 'critical', message: 'Glucose critically low: 58 mg/dL',  time: new Date(Date.now() - 8 * 60000).toISOString(),  acknowledged: false },
-  { id: '3', patientId: '3', patientName: 'Ankit Verma',  type: 'warning',  message: 'Missed insulin dose — 2 h overdue', time: new Date(Date.now() - 90 * 60000).toISOString(), acknowledged: true  },
-  { id: '4', patientId: '4', patientName: 'Sana Khan',    type: 'warning',  message: 'Glucose elevated: 240 mg/dL after dinner', time: new Date(Date.now() - 2 * 3600000).toISOString(), acknowledged: true },
+  { id: '1', patientId: '1', patientName: 'Rahul Sharma', severity: 'critical', type: 'high_glucose',   message: 'Glucose critically high: 320 mg/dL',      timestamp: new Date(Date.now() - 10 * 60000).toISOString(),    acknowledged: false },
+  { id: '2', patientId: '2', patientName: 'Priya Mehta',  severity: 'critical', type: 'low_glucose',    message: 'Glucose critically low: 58 mg/dL',        timestamp: new Date(Date.now() - 8 * 60000).toISOString(),     acknowledged: false },
+  { id: '3', patientId: '3', patientName: 'Ankit Verma',  severity: 'warning',  type: 'missed_dose',    message: 'Missed insulin dose — 2 h overdue',       timestamp: new Date(Date.now() - 90 * 60000).toISOString(),    acknowledged: true  },
+  { id: '4', patientId: '4', patientName: 'Sana Khan',    severity: 'warning',  type: 'high_glucose',   message: 'Glucose elevated: 240 mg/dL after dinner', timestamp: new Date(Date.now() - 2 * 3600000).toISOString(),   acknowledged: true  },
 ];
 
 const MOCK_PATIENTS = [
@@ -61,14 +61,7 @@ export default function DoctorDashboard() {
   const critical = patients.filter((p) => p.status === 'critical').length;
   const warning = patients.filter((p) => p.status === 'warning').length;
   const stable = patients.filter((p) => p.status === 'normal').length;
-  const unread = unreadCount();
-
-  const quickActions = [
-    { icon: 'alert-circle-outline', label: 'Alerts', badge: unread, onPress: () => router.push('/(doctor)/tabs/alerts') },
-    { icon: 'people-outline', label: 'Patients', onPress: () => router.push('/(doctor)/tabs/patients') },
-    { icon: 'calendar-outline', label: 'Schedule', onPress: () => router.push('/(doctor)/tabs/appointments') },
-    { icon: 'chatbubble-outline', label: 'Messages', onPress: () => router.push('/(doctor)/tabs/messages') },
-  ];
+  const unread = unreadCount;
 
   return (
     <View style={styles.container}>
@@ -78,7 +71,7 @@ export default function DoctorDashboard() {
       <View style={styles.header}>
         <View>
           <Text style={styles.greeting}>Good morning,</Text>
-          <Text style={styles.name}>Dr. {user?.name?.split(' ')[0] ?? 'Doctor'}</Text>
+          <Text style={styles.name}>{user?.name ?? 'Doctor'}</Text>
         </View>
         <TouchableOpacity onPress={() => router.push('/(doctor)/profile')} style={styles.avatar}>
           <Text style={styles.avatarText}>{initials(user?.name ?? 'Dr')}</Text>
@@ -96,26 +89,6 @@ export default function DoctorDashboard() {
           <StatCard value={critical} label="Critical" color={Colors.critical} />
           <StatCard value={warning} label="Warning" color={Colors.warning ?? Colors.amber} />
           <StatCard value={stable} label="Stable" color={Colors.inRange} />
-        </View>
-
-        {/* Quick actions */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickRow}>
-            {quickActions.map((a) => (
-              <TouchableOpacity key={a.label} style={styles.quickCard} onPress={a.onPress}>
-                <View style={styles.quickIcon}>
-                  <Ionicons name={a.icon} size={22} color={Colors.teal} />
-                  {!!a.badge && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>{a.badge > 9 ? '9+' : a.badge}</Text>
-                    </View>
-                  )}
-                </View>
-                <Text style={styles.quickLabel}>{a.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
         </View>
 
         {/* Patient status */}
@@ -171,7 +144,7 @@ export default function DoctorDashboard() {
                 <Text style={styles.alertName}>{a.patientName}</Text>
                 <Text style={styles.alertMsg}>{a.message}</Text>
               </View>
-              <Text style={styles.alertTime}>{fromNow(a.time)}</Text>
+              <Text style={styles.alertTime}>{fromNow(a.timestamp)}</Text>
             </View>
           ))}
         </View>
@@ -224,22 +197,6 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.sm },
   sectionTitle: { fontSize: FontSize.md, fontWeight: '700', color: Colors.textPrimary },
   seeAll: { fontSize: FontSize.sm, color: Colors.teal, fontWeight: '600' },
-
-  quickRow: { flexDirection: 'row', gap: Spacing.sm },
-  quickCard: {
-    flex: 1, backgroundColor: Colors.white,
-    borderRadius: Radius.md, padding: Spacing.sm,
-    alignItems: 'center', ...Shadow.sm,
-  },
-  quickIcon: { position: 'relative', marginBottom: 6 },
-  quickLabel: { fontSize: 11, color: Colors.textSecondary, textAlign: 'center' },
-  badge: {
-    position: 'absolute', top: -4, right: -8,
-    backgroundColor: Colors.critical,
-    borderRadius: 8, paddingHorizontal: 4, paddingVertical: 1,
-    minWidth: 16, alignItems: 'center',
-  },
-  badgeText: { color: Colors.white, fontSize: 9, fontWeight: '700' },
 
   patientCard: {
     backgroundColor: Colors.white,

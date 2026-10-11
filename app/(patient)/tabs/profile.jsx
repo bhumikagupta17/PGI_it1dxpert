@@ -70,8 +70,9 @@ export default function ProfileScreen() {
 
       <View style={styles.menuSection}>
         <Text style={styles.menuSectionTitle}>HEALTH</Text>
-        <MenuItem icon="fitness-outline"    label="Glucose Targets"     value={`${user?.targetGlucoseLow ?? 70}–${user?.targetGlucoseHigh ?? 180}`} onPress={() => {}} />
-        <MenuItem icon="medical-outline"    label="Insulin Regimen"     onPress={() => {}} />
+        <MenuItem icon="calendar-outline"      label="Appointments"    onPress={() => router.push('/(patient)/appointments')} />
+        <MenuItem icon="fitness-outline"       label="Glucose Targets" value={`${user?.targetGlucoseLow ?? 70}–${user?.targetGlucoseHigh ?? 180}`} onPress={() => {}} />
+        <MenuItem icon="medical-outline"       label="Insulin Regimen" onPress={() => {}} />
         <MenuItem icon="document-text-outline" label="Export My Data"  onPress={() => {}} />
       </View>
 
